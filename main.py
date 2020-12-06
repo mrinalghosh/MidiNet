@@ -10,6 +10,7 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from model import *
 from ops import *
+from argparse import ArgumentParser
 
 class get_dataloader(object):
     def __init__(self, data, prev_data, y):
@@ -50,10 +51,10 @@ def load_data():
     #######################################
     return train_loader
 
-def main():
-    is_train = 1
-    is_draw = 0
-    is_sample = 0
+def main(args):
+    is_train = args.is_train
+    is_draw = args.is_draw
+    is_sample = args.is_sample
 
     epochs = 20
     lr = 0.0002
@@ -65,7 +66,7 @@ def main():
     device = torch.device('cuda')
     train_loader = load_data()
 
-    if is_train == 1 :
+    if is_train:
         netG = generator(pitch_range).to(device)
         netD = discriminator(pitch_range).to(device)  
 
@@ -221,7 +222,7 @@ def main():
         torch.save(netG.state_dict(), '%s/netG_epoch_%d.pth' % ('../models', epoch))
         torch.save(netD.state_dict(), '%s/netD_epoch_%d.pth' % ('../models', epoch))
 
-    if is_draw == 1:
+    if is_draw:
         lossD_print = np.load('lossD_list.npy')
         lossG_print = np.load('lossG_list.npy')
         length = lossG_print.shape[0]
@@ -237,7 +238,7 @@ def main():
         plt.ylabel('loss')
         plt.savefig('where you want to save/lr='+ str(lr) +'_epoch='+str(epochs)+'.png')
 
-    if is_sample == 1:
+    if is_sample:
         batch_size = 8
         nz = 100
         n_bars = 7
@@ -287,5 +288,13 @@ def main():
 
 if __name__ == "__main__" :
 
-    main()
+    parser = ArgumentParser()
+    
+    parser.add_argument('--is_train', action='store_true')
+    parser.add_argument('--is_draw', action='store_true')
+    parser.add_argument('--is_sample', action='store_true')
+
+    args = parser.parse_args()
+
+    main(args)
 
