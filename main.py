@@ -64,7 +64,7 @@ def main(args):
     check_range_ed = 129
     pitch_range = check_range_ed - check_range_st-1
 
-    device = torch.device('cuda')
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     train_loader = load_data()
 
     if args.is_train:
