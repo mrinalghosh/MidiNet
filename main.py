@@ -33,9 +33,9 @@ def load_data():
     pitch_range = check_range_ed - check_range_st-1
     # print('pitch range: {}'.format(pitch_range))
 
-    X_tr = np.load('your training x')
-    prev_X_tr = np.load('your training prev x')
-    y_tr    = np.load('your training chord')
+    X_tr = np.load('octave2_X_tr.npy') # training data
+    prev_X_tr = np.load('octave2_prev_X_tr.npy') # previous training data
+    y_tr    = np.load('') # training chord
     X_tr = X_tr[:,:,:,check_range_st:check_range_ed]
     prev_X_tr = prev_X_tr[:,:,:,check_range_st:check_range_ed]
 
