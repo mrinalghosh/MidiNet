@@ -1,38 +1,48 @@
 import numpy as np
 import random
-import math
 import time
 
-def test_data(data,test_idx):
+def test_data(data, test_idx):
 
-    #save the test data and train data separately
+    # save the test data and train data separately
     X_te = []
     for i in range(test_idx.shape[0]):
         stp = (test_idx[i])*8
         edp = stp + 8
-        song = data[stp:edp,0,:,:]
-        song = song.reshape((8,1,128,16))
+        song = data[stp:edp, 0, :, :]
+        song = song.reshape((8, 1, 128, 16))
         X_te.append(song)
         # print('i: {}, test_iex: {}, stp: {}, song.shape: {}, song num: {}'.format(i, test_idx[i], stp, song.shape, len(X_te)))
-        
+
     X_te = np.vstack(X_te)
     return X_te
 
 
-def train_data(data,train_idx):
+def train_data(data, train_idx):
 
-    #save the test data and train data separately
+    # save the test data and train data separately
     X_tr = []
     for i in range(train_idx.shape[0]):
         stp = (train_idx[i])*8
         edp = stp + 8
-        song = data[stp:edp,0,:,:]
-        song = song.reshape((8,1,128,16))
+        song = data[stp:edp, 0, :, :]
+        song = song.reshape((8, 1, 128, 16))
         X_tr.append(song)
         # print('i: {}, train_iex: {}, stp: {}, song.shape: {}, song num: {}'.format(i, train_idx[i], stp, song.shape, len(X_tr)))
 
     X_tr = np.vstack(X_tr)
     return X_tr
+
+def label_data(labels, idx):
+    y = []
+    for i in range(idx.shape[0]):
+        stp = (idx[i])*8
+        edp = stp + 8
+        key = labels[stp:edp, :]
+        y.append(key)
+
+    y = np.vstack(y)
+    return y
 
 if __name__ == "__main__":
     # LOAD DATA
@@ -42,12 +52,13 @@ if __name__ == "__main__":
     np.load = lambda *a, **k: np_load_old(*a, allow_pickle=True, **k)
 
     # SECRET SAUCE CHORD PREPARATION:
-    # data = np.load('octave2_x_T.npy') 
+    # data = np.load('octave2_x_T.npy')
     # prev_data = np.load('octave2_prev_x_T.npy')
 
-    # INSTEAD:
+    # INSTEAD RUN THIS THE FIRST TIME (or when regenerating the splits):
     data = np.load('data_x.npy')
     prev_data = np.load('prev_x.npy')
+    y = np.load('y.npy')
 
     print('data shape: {}'.format(data.shape))
     time.sleep(3)
@@ -57,41 +68,39 @@ if __name__ == "__main__":
     test_song_num = round(song_idx*test_ratial)
     train_song_num = data.shape[0] - test_song_num
     print('total song number: {}'.format(song_idx))
-    print('number of test song: {}, \n,number of train song: {}'.format(test_song_num,train_song_num))
+    print('number of test song: {}, \n,number of train song: {}'.format(test_song_num, train_song_num))
     time.sleep(3)
 
-    #create the song idx for test data
+    # create the song idx for test data
 
     full = np.arange(song_idx)
 
-    test_idx= random.sample(range(0,full.shape[0]),test_song_num)
+    test_idx = random.sample(range(0, full.shape[0]), test_song_num)
     test_idx = np.asarray(test_idx)
-    print('total {} song idx for test: {}'.format(test_idx.shape[0],test_idx))
+    print('total {} song idx for test: {}'.format(test_idx.shape[0], test_idx))
     time.sleep(3)
 
-    #create the song idx for train data
-    train_idx = np.delete(full,test_idx)
-    print('total {} song idx for train: {}'.format(train_idx.shape[0],train_idx))
+    # create the song idx for train data
+    train_idx = np.delete(full, test_idx)
+    print('total {} song idx for train: {}'.format(train_idx.shape[0], train_idx))
     time.sleep(3)
 
     # test data
-    X_te = test_data(data,test_idx)
-    prev_X_te = test_data(prev_data,test_idx)
-    np.save('octave2_X_te.npy',X_te)
-    np.save('octave2_prev_X_te',prev_X_te)
+    X_te = test_data(data, test_idx)
+    prev_X_te = test_data(prev_data, test_idx)
+    y_te = label_data(y, test_idx)
+    np.save('octave2_X_te.npy', X_te)
+    np.save('octave2_prev_X_te', prev_X_te)
+    np.save('y_te.npy', y_te)
 
     print('test song completed, X_te matrix shape: {}'.format(X_te.shape))
 
-    #training data
-    X_tr = train_data(data,train_idx)
-    prev_X_tr = train_data(prev_data,train_idx)
-    np.save('octave2_X_tr.npy',X_tr)
-    np.save('octave2_prev_X_tr.npy',prev_X_tr)
+    # training data
+    X_tr = train_data(data, train_idx)
+    prev_X_tr = train_data(prev_data, train_idx)
+    y_tr = label_data(y, train_idx)
+    np.save('octave2_X_tr.npy', X_tr)
+    np.save('octave2_prev_X_tr.npy', prev_X_tr)
+    np.save('y_tr.npy', y_tr)
 
     print('train song completed, X_tr matrix shape: {}'.format(X_tr.shape))
-
-
-
-
-
-

@@ -1,48 +1,62 @@
 import xml.etree.ElementTree as ET
-import xmldataset
 import os
-from os.path import basename, dirname, join, exists, splitext
-import ipdb
+from os.path import join, splitext
 import numpy as np
 from argparse import ArgumentParser
 
 
 def get_sample(cur_song, cur_dur, n_ratio, dim_pitch, dim_bar):
+    '''
+    MidiNet paper: https://arxiv.org/pdf/1703.10847.pdf
 
-    cur_bar = np.zeros((1, dim_pitch, dim_bar), dtype=int)
-    idx = 1
-    sd = 0
-    ed = 0
+    get_sample() converts a list of the form [path, midi notes 1:n] to MULTIPLE sample arrays X described below
+
+    h = 128, number of midi notes we consider
+    w = 128, number of timesteps in a bar
+    X \in (h x w) = (1,128, 128)
+
+    after calculating the matrix X for bar, we concatenate on the first layer (_, 1, 128, 128) to stack bars from the same song together
+    Can check for values generated outside range of two octaves selected in the binary matrix for model collapse
+    '''
+
+    cur_bar = np.zeros((1, dim_pitch, dim_bar), dtype=int)  # (1,128,128)
+    idx = 1  # start at first midi  note value - not path
+    sd = 0  # standard duration? HELP
+    ed = 0  # extended duration? HELP
     song_sample = []
 
     while idx < len(cur_song):
-        cur_pitch = cur_song[idx]-1
+        cur_pitch = cur_song[idx]-1  # store previous midi note value
+        # ed + current midi note value * n_ratio (?)
         ed = int(ed + cur_dur[idx]*n_ratio)
-        # print('pitch: {}, sd:{}, ed:{}'.format(cur_pitch, sd, ed))
         if ed < dim_bar:
+            # if 'ed'<128 set all values (~, previous note value, ) that are less than ed in current bar to 1
             cur_bar[0, cur_pitch, sd:ed] = 1
             sd = ed
             idx = idx + 1
         elif ed >= dim_bar:
             cur_bar[0, cur_pitch, sd:] = 1
-            song_sample.append(cur_bar)
+            song_sample.append(cur_bar)  # add to list of ndarrays
+            # reset for next bar
             cur_bar = np.zeros((1, dim_pitch, dim_bar), dtype=int)
             sd = 0
             ed = 0
-            # print(cur_bar)
-            # print(song_sample)
-        # if idx == len(cur_song)-1 and np.sum(cur_bar)!=0:
-        #     song_sample.append(cur_bar)
+
+    # sample = np.asarray(sample)
+    # print('sample shape: {}\t cur_bar shape: {}'.format(sample.shape, cur_bar.shape))
+
     return song_sample
 
 
-def build_matrix(note_list_all_c, dur_list_all_c):
+def build_matrix(note_list_all_c, dur_list_all_c, key_list_all_c):
     data_x = []
     prev_x = []
+    y = []
     zero_counter = 0
     for i in range(len(note_list_all_c)):
         song = note_list_all_c[i]
         dur = dur_list_all_c[i]
+        key = key_list_all_c[i]
         song_sample = get_sample(song, dur, 4, 128, 128)
         np_sample = np.asarray(song_sample)
         if len(np_sample) == 0:
@@ -54,41 +68,93 @@ def build_matrix(note_list_all_c, dur_list_all_c):
             if np.sum(np_sample) != 0:
                 place = np_sample.shape[3]
                 new = []
-                for i in range(0, place, 16):
-                    new.append(np_sample[0][:, :, i:i+16])
+                for j in range(0, place, 16):
+                    new.append(np_sample[0][:, :, j:j+16])
                 # (2,1,128,128) will become (16,1,128,16)
                 new = np.asarray(new)
                 new_prev = np.zeros(new.shape, dtype=int)
                 new_prev[1:, :, :, :] = new[0:new.shape[0]-1, :, :, :]
                 data_x.append(new)
                 prev_x.append(new_prev)
+                for j in range(8):
+                    y.append(key)
 
+    y = np.vstack(y)
     data_x = np.vstack(data_x)
     prev_x = np.vstack(prev_x)
 
-    return data_x, prev_x, zero_counter
+    return data_x, prev_x, y, zero_counter
+
+# def build_matrix(note_list_all_c, dur_list_all_c, key_list_all_c):
+#     data_x, prev_x, y = ([], ) * 3
+
+#     zero_counter = 0
+#     for i in range(len(note_list_all_c)): # iterating over number of songs
+#         song = note_list_all_c[i]
+#         dur = dur_list_all_c[i]
+#         key = key_list_all_c[i]
+#         # sample = get_sample(cur_song=song, cur_dur=dur, key=key, n_ratio=4, dim_pitch=128, dim_bar=128) # returns (num_bars, 1, 128, 128)
+#         song_sample = get_sample(cur_song=song, cur_dur=dur, n_ratio=4, dim_pitch=128, dim_bar=128)
+#         sample = np.asarray(song_sample)
+#         if len(sample) == 0: # might be empty from get_sample
+#             zero_counter += 1
+#         if len(sample) != 0:
+#             sample = sample[0] # why would you overwrite the sample you got above?
+#             sample = sample.reshape(1, 1, 128, 128)
+
+#             if np.sum(sample) != 0:
+#                 place = sample.shape[3] # 128
+#                 new = []
+#                 for i in range(0, place, 16): # [0, 16, 32, 48, 64, 80, 96, 112]
+#                     new.append(sample[0][:, :, i:i+16])
+#                     # above line splits last dimension into blocks of 16  - puts it into dimension 0
+#                     # THIS DOES NOTHING WITH THE FIRST DIMENSION OF SAMPLES ???? FIX
+
+#                 new = np.asarray(new) # (2,1,128,128) will become (16,1,128,16)
+#                 new_prev = np.zeros(new.shape, dtype=int)
+#                 new_prev[1:, :, :, :] = new[0:new.shape[0]-1, :, :, :]
+#                 data_x.append(new)
+#                 prev_x.append(new_prev)
+#                 y.append(key)
+
+#     data_x = np.vstack(data_x)
+#     prev_x = np.vstack(prev_x)
+#     y = np.vstack(y)
+
+#     return data_x, prev_x, y, zero_counter
 
 
-def check_melody_range(note_list_all, dur_list_all):
+def check_melody_range(note_list_all, dur_list_all, key_list_all):
     in_range = 0
+    # THESE NAMES ARE TERRIBLE - FIX!!!
     note_list_all_c = []
     dur_list_all_c = []
+    key_list_all_c = []
 
     for i in range(len(note_list_all)):
         song = note_list_all[i]
-        if len(song[1:]) == 0:
-            ipdb.set_trace()
+        if len(song[1:]) == 0:  # NO NOTES IN SONG - only path
+            pass
         elif min(song[1:]) >= 60 and max(song[1:]) <= 83:
             in_range += 1
             note_list_all_c.append(song)
             dur_list_all_c.append(dur_list_all[i])
+            key_list_all_c.append(key_list_all[i])
     np.save('dur_list_all_c.npy', dur_list_all_c)
     np.save('note_list_all_c.npy', note_list_all_c)
+    np.save('key_list_all_c.npy', key_list_all_c)
 
-    return in_range, note_list_all_c, dur_list_all_c
+    return in_range, note_list_all_c, dur_list_all_c, key_list_all_c
+
+
+def one_hot(length, pos):
+    oh = np.zeros(length)
+    oh[pos] = 1
+    return oh
 
 
 def transform_note(c_key_list, d_key_list, e_key_list, f_key_list, g_key_list, a_key_list, b_key_list):
+    # HUGE PROBLEM - THIS GENERALIZES THE SCALE TO ONLY NATURAL NOTES - NO SHARPS OR FLATS
     scale = [48, 50, 52, 53, 55, 57, 59, 60, 62, 64, 65, 67, 69,
              71, 72, 74, 76, 77, 79, 81, 83, 84, 86, 88, 89, 91, 93]
     transfor_list_C1 = scale[0:7]
@@ -119,11 +185,10 @@ def transform_note(c_key_list, d_key_list, e_key_list, f_key_list, g_key_list, a
     transfor_list_B2 = scale[13:20]
     transfor_list_B3 = scale[20:27]
 
-    # note_c, note_d, note_e, note_f, note_g, note_a, note_b = ([], ) * 7
-    # dur_c, dur_d, dur_e, dur_f, dur_g, dur_a, dur_b = ([], ) * 7
+    note_c, note_d, note_e, note_f, note_g, note_a, note_b = ([], ) * 7
+    dur_c, dur_d, dur_e, dur_f, dur_g, dur_a, dur_b = ([], ) * 7
+    key_c, key_d, key_e, key_f, key_g, key_a, key_b = ([], ) * 7
 
-    note_c = []
-    dur_c = []
     for file_ in c_key_list:
         note_list = [file_]
         dur_list = [file_]
@@ -141,6 +206,7 @@ def transform_note(c_key_list, d_key_list, e_key_list, f_key_list, g_key_list, a
                 try:
                     note = int(note)
                     if octave == '-1':
+                        # PROBLEM - THIS GENERALIZES ALL NOTES IN 'C' to the major scale only
                         h_idx = transfor_list_C1[note-1]
                     elif octave == '0':
                         h_idx = transfor_list_C2[note-1]
@@ -163,12 +229,12 @@ def transform_note(c_key_list, d_key_list, e_key_list, f_key_list, g_key_list, a
 
             note_c.append(note_list)
             dur_c.append(dur_list)
+            key_c.append(one_hot(13, 0))  # encoded 1-12 = key, 13=maj/min
 
         except:
-            print('c key but no melody/notes :{}'.format(file_))
+            pass
+            # print('c key but no melody/notes :{}'.format(file_))
 
-    note_d = []
-    dur_d = []
     for file_ in d_key_list:
         note_list = [file_]
         dur_list = [file_]
@@ -208,12 +274,12 @@ def transform_note(c_key_list, d_key_list, e_key_list, f_key_list, g_key_list, a
 
             note_d.append(note_list)
             dur_d.append(dur_list)
+            key_d.append(one_hot(13, 2))  # encoded 1-12 = key, 13=maj/min
 
         except:
-            print('d key but no melody/notes :{}'.format(file_))
+            pass
+            # print('d key but no melody/notes :{}'.format(file_))
 
-    note_e = []
-    dur_e = []
     for file_ in e_key_list:
         note_list = [file_]
         dur_list = [file_]
@@ -253,13 +319,13 @@ def transform_note(c_key_list, d_key_list, e_key_list, f_key_list, g_key_list, a
 
             note_e.append(note_list)
             dur_e.append(dur_list)
+            key_e.append(one_hot(13, 4))  # encoded 1-12 = key, 13=maj/min
 
         except:
-            print('e key but no melody/notes :{}'.format(file_))
+            pass
+            # print('e key but no melody/notes :{}'.format(file_))
 
-    note_f = []
-    dur_f = []
-    for file_ in e_key_list:
+    for file_ in f_key_list:
         note_list = [file_]
         dur_list = [file_]
         try:
@@ -298,13 +364,13 @@ def transform_note(c_key_list, d_key_list, e_key_list, f_key_list, g_key_list, a
 
             note_f.append(note_list)
             dur_f.append(dur_list)
+            key_f.append(one_hot(13, 5))
 
         except:
-            print('f key but no melody/notes :{}'.format(file_))
+            pass
+            # print('f key but no melody/notes :{}'.format(file_))
 
-    note_g = []
-    dur_g = []
-    for file_ in a_key_list:
+    for file_ in g_key_list:
         note_list = [file_]
         dur_list = [file_]
         try:
@@ -343,12 +409,12 @@ def transform_note(c_key_list, d_key_list, e_key_list, f_key_list, g_key_list, a
 
             note_g.append(note_list)
             dur_g.append(dur_list)
+            key_g.append(one_hot(13, 7))
 
         except:
-            print('g key but no melody/notes :{}'.format(file_))
+            pass
+            # print('g key but no melody/notes :{}'.format(file_))
 
-    note_a = []
-    dur_a = []
     for file_ in a_key_list:
         note_list = [file_]
         dur_list = [file_]
@@ -388,13 +454,13 @@ def transform_note(c_key_list, d_key_list, e_key_list, f_key_list, g_key_list, a
 
             note_a.append(note_list)
             dur_a.append(dur_list)
+            key_a.append(one_hot(13, 9))
 
         except:
-            print('e key but no melody/notes :{}'.format(file_))
+            pass
+            # print('a key but no melody/notes :{}'.format(file_))
 
-    note_b = []
-    dur_b = []
-    for file_ in a_key_list:
+    for file_ in b_key_list:
         note_list = [file_]
         dur_list = [file_]
         try:
@@ -433,14 +499,17 @@ def transform_note(c_key_list, d_key_list, e_key_list, f_key_list, g_key_list, a
 
             note_b.append(note_list)
             dur_b.append(dur_list)
+            key_b.append(one_hot(13, 11))
 
         except:
-            print('b key but no melody/notes :{}'.format(file_))
+            pass
+            # print('b key but no melody/notes :{}'.format(file_))
 
     note_list_all = note_c + note_d + note_e + note_f + note_g + note_a + note_b
     dur_list_all = dur_c + dur_d + dur_e + dur_f + dur_g + dur_a + dur_b
+    key_list_all = key_c + key_d + key_e + key_f + key_g + key_a + key_b
 
-    return note_list_all, dur_list_all
+    return note_list_all, dur_list_all, key_list_all
 
 
 def get_key(list_of_four_beat):
@@ -456,6 +525,7 @@ def get_key(list_of_four_beat):
         try:
             chorus_file = ET.parse(file_)
             root = chorus_file.getroot()
+            # this only gives the letter key - need to find major and minor
             key = root.findall('.//key')
             key_list.append(key[0].text)
             if key[0].text == 'C':
@@ -474,13 +544,6 @@ def get_key(list_of_four_beat):
                 b_key_list.append(file_)
         except:
             print('Unable to open {}... skipping'.format(file_))
-    # print('A key: {}'.format(key_list.count('A')))
-    # print('B key: {}'.format(key_list.count('B')))
-    # print('C key: {}'.format(key_list.count('C')))
-    # print('D key: {}'.format(key_list.count('D')))
-    # print('E key: {}'.format(key_list.count('E')))
-    # print('F key: {}'.format(key_list.count('F')))
-    # print('G key: {}'.format(key_list.count('G')))
 
     return c_key_list, d_key_list, e_key_list, f_key_list, g_key_list, a_key_list, b_key_list
 
@@ -510,19 +573,19 @@ def check_chord_type(list_file):
             check_list = []
             counter = 0
             None_counter = 0
+
             for item in root.iter(tag='fb'):
                 check_list.append(item.text)
                 counter += 1
                 if item.text == None:
                     None_counter += 1
+
             for item in root.iter(tag='borrowed'):
                 check_list.append(item.text)
                 counter += 1
                 if item.text == None:
                     None_counter += 1
-            # print(check_list)
-            # print(counter)
-            # print(None_counter)
+
             if counter == None_counter:
                 list_.append(file_)
         except:
@@ -544,6 +607,7 @@ def get_listfile(dataset_path):
 
 
 def main(args):
+    # first time run need to include both --get_data and --get_matrix in order to generate the matrix (or run w --get_data only)
     if args.get_data:
         a = 'data'
         list_file = get_listfile(a)
@@ -551,27 +615,29 @@ def main(args):
         list_of_four_beat = beats_(list_)
         c_key_list, d_key_list, e_key_list, f_key_list, g_key_list, a_key_list, b_key_list = get_key(
             list_of_four_beat)
-        note_list_all, dur_list_all = transform_note(
+        note_list_all, dur_list_all, key_list_all = transform_note(
             c_key_list, d_key_list, e_key_list, f_key_list, g_key_list, a_key_list, b_key_list)
-        in_range, note_list_all_c, dur_list_all_c = check_melody_range(
-            note_list_all, dur_list_all)
-        print('total normal chord: {}'.format(len(list_)))
-        print('total in four: {}'.format(len(list_of_four_beat)))
-        print('melody in range: {}'.format(len(note_list_all)))
+        in_range, note_list_all_c, dur_list_all_c, key_list_all_c = check_melody_range(
+            note_list_all, dur_list_all, key_list_all)
+        print('Total normal chord: {}'.format(len(list_)))
+        print('Total in four: {}'.format(len(list_of_four_beat)))
+        print('Melodies in range: {}'.format(len(note_list_all)))
 
     if args.get_matrix:
         note_list_all_c = np.load('note_list_all_c.npy')
         dur_list_all_c = np.load('dur_list_all_c.npy')
+        key_list_all_c = np.load('key_list_all_c.npy')
 
-        data_x, prev_x, zero_counter = build_matrix(
-            note_list_all_c, dur_list_all_c)
+        data_x, prev_x, y, zero_counter = build_matrix(
+            note_list_all_c, dur_list_all_c, key_list_all_c)
         np.save('data_x.npy', data_x)
         np.save('prev_x.npy', prev_x)
+        np.save('y.npy', y)
 
-        print('final tab num: {}'.format(len(note_list_all_c)))
-        print('songs not long enough: {}'.format(zero_counter))
-        print('sample shape: {}, prev sample shape: {}'.format(
-            data_x.shape, prev_x.shape))
+        print('Final tab num: {}'.format(len(note_list_all_c)))
+        print('Songs not long enough: {}'.format(zero_counter))
+        print('Sample shape: {}, prev sample shape: {}, label shape: {}'.format(
+            data_x.shape, prev_x.shape, y.shape))
 
 
 if __name__ == "__main__":
