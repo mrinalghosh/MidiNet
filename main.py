@@ -36,8 +36,7 @@ def load_data():
 
     X_tr = np.load('octave2_X_tr.npy')  # training data
     prev_X_tr = np.load('octave2_prev_X_tr.npy')  # previous training data
-    # y_tr    = np.load('') # training chord
-    y_tr = np.ndarray([])
+    y_tr = np.load('y_tr.npy') # training chords
     X_tr = X_tr[:, :, :, check_range_st:check_range_ed]
     prev_X_tr = prev_X_tr[:, :, :, check_range_st:check_range_ed]
 
@@ -49,15 +48,14 @@ def load_data():
     train_loader = DataLoader(
         train_iter, batch_size=72, shuffle=True, **kwargs)
 
-    print('data preparation is completed')
+    print('Data preparation complete')
     #######################################
     return train_loader
 
 
 def main(args):
-    is_train = args.is_train
-    is_draw = args.is_draw
-    is_sample = args.is_sample
+    np_load_old = np.load
+    np.load = lambda *a, **k: np_load_old(*a, allow_pickle=True, **k)
 
     epochs = 20
     lr = 0.0002
@@ -69,7 +67,7 @@ def main(args):
     device = torch.device('cuda')
     train_loader = load_data()
 
-    if is_train:
+    if args.is_train:
         netG = generator(pitch_range).to(device)
         netD = discriminator(pitch_range).to(device)
 
@@ -226,8 +224,7 @@ def main(args):
             D_x_list.append(average_D_x)
             D_G_z_list.append(average_D_G_z)
 
-            print('==> Epoch: {} Average lossD: {:.10f} average_lossG: {:.10f},average D(x): {:.10f},average D(G(z)): {:.10f} '.format(
-                epoch, average_lossD, average_lossG, average_D_x, average_D_G_z))
+            print('==> Epoch: {} Average lossD: {:.10f} average_lossG: {:.10f},average D(x): {:.10f},average D(G(z)): {:.10f} '.format(epoch, average_lossD, average_lossG, average_D_x, average_D_G_z))
 
         np.save('lossD_list.npy', lossD_list)
         np.save('lossG_list.npy', lossG_list)
@@ -237,12 +234,10 @@ def main(args):
         np.save('D_G_z_list.npy', D_G_z_list)
 
         # do checkpointing
-        torch.save(netG.state_dict(), '%s/netG_epoch_%d.pth' %
-                   ('../models', epoch))
-        torch.save(netD.state_dict(), '%s/netD_epoch_%d.pth' %
-                   ('../models', epoch))
+        torch.save(netG.state_dict(), '%s/netG_epoch_%d.pth' % ('../models', epoch))
+        torch.save(netD.state_dict(), '%s/netD_epoch_%d.pth' % ('../models', epoch))
 
-    if is_draw:
+    if args.is_draw:
         lossD_print = np.load('lossD_list.npy')
         lossG_print = np.load('lossG_list.npy')
         length = lossG_print.shape[0]
@@ -259,14 +254,14 @@ def main(args):
         plt.savefig('where you want to save/lr=' +
                     str(lr) + '_epoch='+str(epochs)+'.png')
 
-    if is_sample:
+    if args.is_sample:
         batch_size = 8
         nz = 100
         n_bars = 7
-        # X_te = np.load('your testing x')
-        # prev_X_te = np.load('your testing prev x')
+        X_te = np.load('octave2_X_te.npy')
+        prev_X_te = np.load('octave2_prev_X_te.npy')
         prev_X_te = prev_X_te[:, :, check_range_st:check_range_ed, :]
-        # y_te    = np.load('your chord')
+        y_te    = np.load('y_te.npy')
 
         test_iter = get_dataloader(X_te, prev_X_te, y_te)
         kwargs = {'num_workers': 4, 'pin_memory': True}  # if args.cuda else {}

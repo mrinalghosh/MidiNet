@@ -1,4 +1,3 @@
-import ipdb
 import matplotlib.pyplot as plt
 import numpy as np
 from pypianoroll import Multitrack, Track

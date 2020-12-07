@@ -61,7 +61,7 @@ if __name__ == "__main__":
     y = np.load('y.npy')
 
     print('data shape: {}'.format(data.shape))
-    time.sleep(3)
+    # time.sleep(3)
 
     song_idx = int(data.shape[0]/8)
     test_ratial = 0.1
@@ -69,7 +69,7 @@ if __name__ == "__main__":
     train_song_num = data.shape[0] - test_song_num
     print('total song number: {}'.format(song_idx))
     print('number of test song: {}, \n,number of train song: {}'.format(test_song_num, train_song_num))
-    time.sleep(3)
+    # time.sleep(3)
 
     # create the song idx for test data
 
@@ -78,12 +78,12 @@ if __name__ == "__main__":
     test_idx = random.sample(range(0, full.shape[0]), test_song_num)
     test_idx = np.asarray(test_idx)
     print('total {} song idx for test: {}'.format(test_idx.shape[0], test_idx))
-    time.sleep(3)
+    # time.sleep(3)
 
     # create the song idx for train data
     train_idx = np.delete(full, test_idx)
     print('total {} song idx for train: {}'.format(train_idx.shape[0], train_idx))
-    time.sleep(3)
+    # time.sleep(3)
 
     # test data
     X_te = test_data(data, test_idx)
